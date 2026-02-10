@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Climate Impact Calculator</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#0f172a;color:#e5e7eb;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.container{background:#020617;max-width:560px;width:95%;padding:28px;border-radius:20px;box-shadow:0 20px 50px rgba(0,0,0,0.6);text-align:center}
+h1{margin:0 0 10px 0;font-size:26px}
+.section{font-size:13px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+.progress{height:10px;background:#1e293b;border-radius:20px;margin-bottom:20px;overflow:hidden}
+.progress-bar{height:10px;background:linear-gradient(90deg,#22c55e,#4ade80);width:0%}
+input,select{width:100%;padding:12px;margin:12px 0;border-radius:12px;border:1px solid #334155;background:#020617;color:white;font-size:15px}
+button{padding:13px;border:none;border-radius:14px;background:linear-gradient(90deg,#16a34a,#22c55e);color:white;font-size:16px;font-weight:bold;cursor:pointer;width:100%}
+.result{font-size:26px;font-weight:bold;margin:12px 0}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;z-index:999}
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay"></div>
+<div class="container">
+<h1>🌍 Global Climate Impact Calculator</h1>
+<div class="progress"><div id="progress" class="progress-bar"></div></div>
+<div id="app"></div>
+</div>
+<script>
+const GLOBAL_AVG=6.3;
+const questions=[
+{section:'Transport',key:'transportType',label:'Main transport type?',type:'select',options:{Car:60,Bus:20,Train:15,Bike:5,Walk:2},optimal:['Bike','Walk','Train','Bus']},
+{section:'Transport',key:'driveKm',label:'Driving distance per week (km)',type:'number',value:20,optimal:v=>v<10},
+{section:'Transport',key:'carType',label:'Car type?',type:'select',options:{Petrol:50,Hybrid:30,Electric:10,none:0},optimal:['Hybrid','Electric','none']},
+{section:'Transport',key:'flightsShort',label:'Short flights per year',type:'number',value:1,optimal:v=>v===0},
+{section:'Transport',key:'flightsLong',label:'Long flights per year',type:'number',value:0,optimal:v=>v===0},
+{section:'Food',key:'dietType',label:'Diet type',type:'select',options:{Meat:3,Balanced:2,Vegetarian:1,Vegan:0.5},optimal:['Balanced', 'Vegetarian','Vegan']},
+{section:'Food',key:'dairy',label:'Dairy consumption level',type:'select',options:{High:2,Medium:1,Low:0.5},optimal:['Low']},
+{section:'Food',key:'foodWaste',label:'Food waste level',type:'select',options:{High:2,Medium:1,Low:0.5},optimal:['Medium', 'Low']},
+{section:'Energy',key:'electricity',label:'Monthly electricity usage (kWh)',type:'number',value:180,optimal:v=>v<120},
+{section:'Energy',key:'renewable',label:'Renewable energy usage',type:'select',options:{Yes:0.5,Partial:1,No:2},optimal:['Yes', 'Partial']},
+{section:'Energy',key:'acUsage',label:'Air conditioning hours/day',type:'number',value:4,optimal:v=>v<3},
+{section:'Water',key:'showers',label:'Showers per week',type:'number',value:7,optimal:v=>v<7},
+{section:'Consumption',key:'shoppingClothes',label:'Clothes purchases/month',type:'number',value:2,optimal:v=>v<2},
+{section:'Consumption',key:'electronics',label:'Electronics/year',type:'number',value:1,optimal:v=>v===0},
+{section:'Consumption',key:'onlineShopping',label:'Online deliveries/month',type:'number',value:3,optimal:v=>v<3},
+{section:'Waste',key:'recycling',label:'Recycling habits',type:'select',options:{Always:0.5,Sometimes:1,Never:2},optimal:['Always', 'Sometimes']},
+{section:'Waste',key:'plasticUse',label:'Single-use plastic usage',type:'select',options:{High:2,Medium:1,Low:0.5},optimal:['Medium', 'Low']},
+{section:'Waste',key:'waterBottles',label:'Plastic bottles/week',type:'number',value:3,optimal:v=>v<2},
+{section:'Lifestyle',key:'mealsOut',label:'Takeaway meals/week',type:'number',value:3,optimal:v=>v<2},
+{section:'Digital',key:'streaming',label:'Streaming hours/day',type:'number',value:2,optimal:v=>v<2},
+{section:'Digital',key:'gaming',label:'Gaming hours/day',type:'number',value:1,optimal:v=>v<2},
+{section:'Home',key:'homeSize',label:'Home size',type:'select',options:{Small:1,Medium:2,Large:3},optimal:['Medium', 'Small']},
+{section:'Home',key:'householdMembers',label:'Household members',type:'number',value:3,optimal:v=>v>2}
+];
+let step=0;
+let form={};
+questions.forEach(q=>{if(q.type==='number')form[q.key]=q.value||0;else form[q.key]=Object.keys(q.options)[0];});
+function calculate(){let t=0;questions.forEach(q=>{const val=form[q.key];if(q.options){t+=Number(q.options[val]||0)*52;}else{t+=Number(val||0)*10;}});return t/1000;}
+function treesNeeded(t){return Math.round(t*45);} 
+function carbonScore(t){return Math.max(0,Math.min(100,Math.round(100-(t*8))));}
+function showOverlay(color,callback){const ov=document.getElementById('overlay');ov.style.background=color;ov.style.transition='opacity 0.5s';ov.style.opacity=1;setTimeout(()=>{callback();setTimeout(()=>{ov.style.transition='opacity 0.5s';ov.style.opacity=0;},200);},500);} 
+function isOptimal(q,val){if(Array.isArray(q.optimal))return q.optimal.includes(val);if(typeof q.optimal==='function')return q.optimal(val);return false;}
+function render(){const app=document.getElementById('app');const progress=document.getElementById('progress');progress.style.width=(step/questions.length*100)+'%';app.innerHTML='';
+if(step<questions.length){const q=questions[step];const section=document.createElement('div');section.className='section';section.textContent=q.section;
+const label=document.createElement('p');label.textContent=(step+1)+'. '+q.label;let input;
+if(q.type==='select'){input=document.createElement('select');for(const k in q.options){const o=document.createElement('option');o.value=k;o.textContent=k;input.appendChild(o);}input.value=form[q.key];input.onchange=e=>form[q.key]=e.target.value;}else{input=document.createElement('input');input.type='number';input.value=form[q.key];input.oninput=e=>form[q.key]=Number(e.target.value);} 
+const btn=document.createElement('button');btn.textContent='Next';btn.onclick=()=>{const optimal=isOptimal(q,form[q.key]);showOverlay(optimal?'rgba(34,197,94,1)':'rgba(100,116,139,1)',()=>{step++;render();});};
+app.appendChild(section);app.appendChild(label);app.appendChild(input);app.appendChild(btn);}else{const tonnes=calculate();const trees=treesNeeded(tonnes);const score=carbonScore(tonnes);
+const result=document.createElement('div');result.className='result';result.textContent=tonnes.toFixed(2)+' tonnes CO₂/year';
+const scoreDiv=document.createElement('div');scoreDiv.className='result';scoreDiv.textContent='Carbon Score: '+score+'/100';
+const compare=document.createElement('p');compare.textContent='Global average: '+GLOBAL_AVG+' tonnes CO₂/year';
+const tree=document.createElement('p');tree.innerHTML='🌳 '+trees+' trees needed yearly to offset your carbon footprint.';
+app.appendChild(result);app.appendChild(scoreDiv);app.appendChild(compare);app.appendChild(tree);
+const again=document.createElement('button');again.textContent='Restart';again.onclick=()=>{step=0;render();};app.appendChild(again);} }
+render();
+</script>
+</body>
+</html>
